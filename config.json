@@ -1,0 +1,31 @@
+{
+    "file_types": {
+        "pdf": "D:\\Documents\\PDF",
+        "ppt": "D:\\Documents\\PPT",
+        "pptx": "D:\\Documents\\PPT",
+        "doc": "D:\\Documents\\Word",
+        "docx": "D:\\Documents\\Word",
+        "xls": "D:\\Documents\\Excel",
+        "xlsx": "D:\\Documents\\Excel",
+        "jpg": "D:\\Pictures",
+        "jpeg": "D:\\Pictures",
+        "png": "D:\\Pictures",
+        "gif": "D:\\Pictures",
+        "mp4": "D:\\Videos",
+        "avi": "D:\\Videos",
+        "mkv": "D:\\Videos",
+        "mp3": "D:\\Music",
+        "wav": "D:\\Music",
+        "zip": "D:\\Archives",
+        "rar": "D:\\Archives",
+        "7z": "D:\\Archives"
+    },
+    "window_settings": {
+        "always_on_top": true,
+        "opacity": 0.8,
+        "position_x": 100,
+        "position_y": 100,
+        "width": 200,
+        "height": 100
+    }
+}
