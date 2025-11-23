@@ -1,6 +1,6 @@
 {
     "file_types": {
-        "pdf": "D:\\Documents\\PDF",
+        "pdf": "D:\\DocPPTuments\\PDF",
         "ppt": "D:\\Documents\\PPT",
         "pptx": "D:\\Documents\\PPT",
         "doc": "D:\\Documents\\Word",
@@ -22,10 +22,11 @@
     },
     "window_settings": {
         "always_on_top": true,
-        "opacity": 0.8,
-        "position_x": 100,
-        "position_y": 100,
-        "width": 200,
-        "height": 100
-    }
+        "opacity": 0.8470588235294118,
+        "position_x": 2772,
+        "position_y": 841,
+        "width": 400,
+        "height": 310
+    },
+    "first_run": false
 }
