@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import shutil
+
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QSystemTrayIcon,
@@ -14,6 +15,90 @@ from PyQt5.QtGui import (
     QColor, QPen, QPixmap, QPainter
 )
 
+# ===================== 配置路径处理（解决打包后找不到 config.json 的问题） =====================
+
+CONFIG_NAME = "config.json"
+
+
+def is_frozen():
+    """是否为 PyInstaller 打包后的可执行文件运行环境"""
+    return getattr(sys, "frozen", False)
+
+
+def get_app_dir():
+    """
+    可写的配置目录：
+    - 源码运行时：main.py 所在目录
+    - exe 运行时：exe 所在目录
+    """
+    if is_frozen():
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_default_data_dir():
+    """
+    默认配置所在目录：
+    - 源码运行时：main.py 所在目录（和 get_app_dir 相同）
+    - exe 运行时：PyInstaller 的临时解包目录 sys._MEIPASS
+    """
+    if is_frozen():
+        # PyInstaller 在运行时会注入 _MEIPASS
+        return getattr(sys, "_MEIPASS", get_app_dir())
+    return get_app_dir()
+
+
+def get_config_path():
+    """返回实际要读写的 config.json 路径（在 app_dir 下）"""
+    return os.path.join(get_app_dir(), CONFIG_NAME)
+
+
+def ensure_config_exists():
+    """
+    确保 app_dir 下有一份 config.json：
+    - 如果已经有，就直接用；
+    - 如果没有但打包时带了默认 config.json，就从默认目录拷贝一份；
+    """
+    config_path = get_config_path()
+    if os.path.exists(config_path):
+        return config_path
+
+    default_path = os.path.join(get_default_data_dir(), CONFIG_NAME)
+    if os.path.exists(default_path) and default_path != config_path:
+        try:
+            shutil.copyfile(default_path, config_path)
+            print(f"已从默认配置复制到: {config_path}")
+        except Exception as e:
+            print(f"复制默认配置失败: {e}")
+    return config_path
+
+
+def load_config_file():
+    """统一的配置读取函数，所有地方都用它"""
+    config_path = ensure_config_exists()
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except Exception as e:
+        print(f"加载配置失败: {e}")
+        config = {}
+
+    config.setdefault("file_types", {})
+    config.setdefault("window_settings", {})
+    return config
+
+
+def save_config_file(config):
+    """统一的配置写入函数"""
+    config_path = get_config_path()
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"保存配置失败: {e}")
+
+
+# ===================== 设置窗口 =====================
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -44,7 +129,7 @@ class SettingsDialog(QDialog):
 
         self.file_type_inputs = {}
 
-        config = self.load_config()
+        config = load_config_file()
         file_types = config.get("file_types", {})
 
         # 排序后显示，列表更整齐
@@ -140,26 +225,14 @@ class SettingsDialog(QDialog):
         if folder:
             line_edit.setText(folder)
 
-    def load_config(self):
-        """加载配置文件，确保始终返回字典"""
-        try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception as e:
-            print(f"加载配置失败: {e}")
-            config = {}
-
-        config.setdefault("file_types", {})
-        return config
-
     def save_config(self):
-        config = self.load_config()
+        config = load_config_file()
         for file_type, line_edit in self.file_type_inputs.items():
             config["file_types"][file_type] = line_edit.text().strip()
+        save_config_file(config)
 
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
 
+# ===================== 主窗口 =====================
 
 class FileOrganizerWindow(QMainWindow):
     # 用 bit 位标记四个方向，方便组合（角落）
@@ -181,7 +254,7 @@ class FileOrganizerWindow(QMainWindow):
         self.resize_region = 0
         self.drag_position = None
 
-    # ========== 窗口大小/位置相关 ==========
+    # ---------- 尺寸 & 位置 ----------
 
     def get_screen_size(self):
         screen = QApplication.primaryScreen()
@@ -371,61 +444,39 @@ class FileOrganizerWindow(QMainWindow):
         self.setMouseTracking(True)
         central_widget.setMouseTracking(True)
 
-    # ========== 配置保存/加载 ==========
+    # ---------- 配置读写 ----------
 
     def load_config(self):
-        """加载配置文件，包含窗口位置/大小/透明度"""
-        try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-                window_settings = config.get("window_settings", {})
+        config = load_config_file()
+        window_settings = config.get("window_settings", {})
 
-                if window_settings.get("width") and window_settings.get("height"):
-                    self.move(
-                        window_settings.get("position_x", 100),
-                        window_settings.get("position_y", 100),
-                    )
-                    self.resize(
-                        window_settings.get("width", 350),
-                        window_settings.get("height", 250),
-                    )
-                else:
-                    width, height = self.calculate_window_size()
-                    x, y = self.calculate_window_position(width, height)
-                    self.move(x, y)
-                    self.resize(width, height)
-
-                opacity = window_settings.get("opacity", 1.0)
-                self.setWindowOpacity(opacity)
-                return config
-        except Exception as e:
-            print(f"加载配置失败: {e}")
+        if window_settings.get("width") and window_settings.get("height"):
+            self.move(
+                window_settings.get("position_x", 100),
+                window_settings.get("position_y", 100),
+            )
+            self.resize(
+                window_settings.get("width", 350),
+                window_settings.get("height", 250),
+            )
+        else:
             width, height = self.calculate_window_size()
             x, y = self.calculate_window_position(width, height)
             self.move(x, y)
             self.resize(width, height)
-            self.setWindowOpacity(1.0)
-            return {"file_types": {}, "window_settings": {}}
+
+        opacity = window_settings.get("opacity", 1.0)
+        self.setWindowOpacity(opacity)
 
     def save_window_settings(self):
-        """保存窗口设置到 config.json"""
-        try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception:
-            config = {}
-
-        if "window_settings" not in config:
-            config["window_settings"] = {}
-
-        config["window_settings"]["position_x"] = self.x()
-        config["window_settings"]["position_y"] = self.y()
-        config["window_settings"]["width"] = self.width()
-        config["window_settings"]["height"] = self.height()
-        config["window_settings"]["opacity"] = self.windowOpacity()
-
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+        config = load_config_file()
+        ws = config.setdefault("window_settings", {})
+        ws["position_x"] = self.x()
+        ws["position_y"] = self.y()
+        ws["width"] = self.width()
+        ws["height"] = self.height()
+        ws["opacity"] = self.windowOpacity()
+        save_config_file(config)
 
     def closeEvent(self, event):
         """真正关闭窗口（例如 Alt+F4）时，顺便保存一下"""
@@ -437,7 +488,7 @@ class FileOrganizerWindow(QMainWindow):
         self.save_window_settings()
         self.hide()
 
-    # ========== 托盘 ==========
+    # ---------- 托盘 ----------
 
     def setup_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)
@@ -503,22 +554,12 @@ class FileOrganizerWindow(QMainWindow):
         self.show()
         self.activateWindow()
 
-    # ========== 首次启动引导 ==========
+    # ---------- 首次启动引导 ----------
 
     def set_first_run_flag(self, value: bool):
-        """在配置文件中记录是否已经完成首次运行引导"""
-        try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception:
-            config = {}
-
-        config.setdefault("file_types", {})
-        config.setdefault("window_settings", {})
+        config = load_config_file()
         config["first_run"] = bool(value)
-
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+        save_config_file(config)
 
     def show_first_run(self):
         """显示首次运行设置窗口，只在第一次启动时弹出"""
@@ -539,18 +580,12 @@ class FileOrganizerWindow(QMainWindow):
         self.set_first_run_flag(False)
 
     def check_first_run(self):
-        """检查是否需要展示首次运行引导"""
-        try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception:
-            config = {}
-
+        config = load_config_file()
         first_run = config.get("first_run", True)
         if first_run:
             QTimer.singleShot(500, self.show_first_run)
 
-    # ========== 设置窗口 ==========
+    # ---------- 设置窗口 ----------
 
     def show_settings(self):
         dialog = SettingsDialog(self)
@@ -562,13 +597,9 @@ class FileOrganizerWindow(QMainWindow):
         self.tray_icon.hide()
         QApplication.quit()
 
-    # ========== 缩放辅助（四角/四边缩放） ==========
+    # ---------- 缩放辅助（四角/四边缩放） ----------
 
     def _get_resize_region(self, pos):
-        """
-        根据鼠标在窗口中的位置判断是否在可缩放区域：
-        返回一个方向标记组合，例如 LEFT|TOP 表示左上角。
-        """
         margin = self.resize_margin
         x, y = pos.x(), pos.y()
         w, h = self.width(), self.height()
@@ -587,7 +618,6 @@ class FileOrganizerWindow(QMainWindow):
         return region
 
     def _update_cursor(self, pos):
-        """根据当前鼠标位置更新光标形状"""
         region = self._get_resize_region(pos)
 
         if region in (self.LEFT | self.TOP, self.RIGHT | self.BOTTOM):
@@ -601,7 +631,7 @@ class FileOrganizerWindow(QMainWindow):
         else:
             self.unsetCursor()
 
-    # ========== 拖拽分类 ==========
+    # ---------- 拖拽分类 ----------
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -624,9 +654,7 @@ class FileOrganizerWindow(QMainWindow):
 
     def organize_file(self, file_path):
         try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
-
+            config = load_config_file()
             file_types = config.get("file_types", {})
             file_extension = os.path.splitext(file_path)[1].lower().lstrip('.')
 
@@ -671,7 +699,7 @@ class FileOrganizerWindow(QMainWindow):
                 2000
             )
 
-    # ========== 鼠标事件：拖动 + 缩放 ==========
+    # ---------- 鼠标事件：拖动 + 缩放 ----------
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

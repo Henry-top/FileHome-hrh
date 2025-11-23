@@ -4,7 +4,7 @@ import os
 # 打包参数
 params = [
     'main.py',
-    '--name=FileOrganizer',
+    '--name=FileHome',
     '--onefile',
     '--windowed',
     '--icon=NONE',
