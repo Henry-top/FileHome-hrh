@@ -80,7 +80,7 @@ class FileOrganizerWindow(QMainWindow):
         
         # 标题栏
         title_bar = QHBoxLayout()
-        self.title_label = QLabel("文件分类器")
+        self.title_label = QLabel("fileHome")
         self.title_label.setStyleSheet("""
             QLabel {
                 color: rgba(255, 255, 255, 0.9);
@@ -189,7 +189,7 @@ class FileOrganizerWindow(QMainWindow):
         tray_menu.addAction(quit_action)
         
         self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.setToolTip("文件分类器")
+        self.tray_icon.setToolTip("fileHome")
         self.tray_icon.activated.connect(self.tray_icon_activated)
         self.tray_icon.show()
     
